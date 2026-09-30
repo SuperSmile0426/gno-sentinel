@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "rule_id": "GNO-AUTH-001",
+      "title": "OriginCaller is used directly as authorization identity",
+      "severity": "high",
+      "confidence": "high",
+      "file": "testdata/auth/vulnerable/main.gno",
+      "line": 8,
+      "column": 5,
+      "evidence": "OriginCaller() appears inside a direct equality/inequality comparison",
+      "explanation": "Gno's transaction-origin caller primitive should not be treated as a general immediate-caller authorization primitive. Cross-realm call semantics require realm-aware caller validation for protected actions.",
+      "remediation": "Use the current realm/crossing API recommended by the target Gno version to derive and validate the immediate caller, and reserve transaction-origin primitives only for cases explicitly designed for them.",
+      "references": [
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-security-guide.md",
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-interrealm.md"
+      ]
+    },
+    {
+      "rule_id": "GNO-PAY-001",
+      "title": "OriginSend payment use lacks a preceding IsUserCall guard",
+      "severity": "high",
+      "confidence": "high",
+      "file": "testdata/payment/vulnerable/main.gno",
+      "line": 6,
+      "column": 5,
+      "evidence": "OriginSend() is used before any IsUserCall() call in the same function",
+      "explanation": "Current Gno security guidance requires payment entry points that rely on the origin-send envelope to verify a direct user call. Weaker or missing guards can make payment verification unsafe across intermediary/ephemeral call paths.",
+      "remediation": "Guard the payment entry point with the current Gno-recommended direct-user-call check before reading OriginSend(), then verify the exact pattern against the Gno version you target.",
+      "references": [
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-security-guide.md",
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-ai-contract-review.md"
+      ]
+    },
+    {
+      "rule_id": "GNO-REALM-001",
+      "title": "unsafe.PreviousRealm is used despite an available realm parameter",
+      "severity": "high",
+      "confidence": "high",
+      "file": "testdata/realm/vulnerable/main.gno",
+      "line": 6,
+      "column": 12,
+      "evidence": "unsafe.PreviousRealm() inside a function accepting realm",
+      "explanation": "Current Gno guidance treats the unsafe previous-realm API as inappropriate in crossing functions that already receive the frame-bound realm capability.",
+      "remediation": "Derive caller identity from the function's realm parameter using the API required by the target Gno version; remove the unsafe previous-realm call.",
+      "references": [
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-security-guide.md",
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-interrealm.md"
+      ]
+    },
+    {
+      "rule_id": "GNO-STATE-001",
+      "title": "Exported getter returns an alias to package-level pointer state",
+      "severity": "high",
+      "confidence": "high",
+      "file": "testdata/state/vulnerable/main.gno",
+      "line": 10,
+      "column": 9,
+      "evidence": "GetState returns package-level pointer state",
+      "explanation": "Returning a live pointer to package/realm state expands the public mutation surface and can interact dangerously with Gno's realm authority and method-dispatch rules.",
+      "remediation": "Return a value copy or a narrow read-only result. Do not return aliased pointers to persistent mutable state.",
+      "references": [
+        "https://github.com/gnolang/gno/blob/master/docs/resources/gno-security-guide.md"
+      ]
+    }
+  ],
+  "count": 4
+}
