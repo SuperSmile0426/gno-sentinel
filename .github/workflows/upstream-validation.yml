@@ -56,19 +56,11 @@ jobs:
             echo "::group::${slug}"
 
             set +e
-            go run ./cmd/gno-sentinel scan               --format json               --gno-version "gnolang/gno@0de4fc2"               --network "upstream-example-corpus"               "./upstream-gno/${rel}"               >"validation/${slug}.json"               2>"validation/${slug}.stderr"
+            go run ./cmd/gno-sentinel scan --format json --gno-version "gnolang/gno@0de4fc2" --network "upstream-example-corpus" "./upstream-gno/${rel}" >"validation/${slug}.json" 2>"validation/${slug}.stderr"
             code=$?
             set -e
 
-            count="$(python - "validation/${slug}.json" <<'PY'
-import json, sys
-try:
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
-        print(json.load(f).get("count", "invalid-json"))
-except Exception:
-    print("invalid-json")
-PY
-)"
+            count="$(jq -r '.count // "invalid-json"' "validation/${slug}.json" 2>/dev/null || echo "invalid-json")"
             printf "%s\t%s\t%s\t%s\n" "${slug}" "${rel}" "${code}" "${count}" >> validation/summary.tsv
 
             echo "path=${rel}"
@@ -84,7 +76,7 @@ PY
           done
 
           echo "=== Validation summary ==="
-          column -t -s $'\t' validation/summary.tsv || cat validation/summary.tsv
+          cat validation/summary.tsv
 
       - name: Upload validation evidence
         uses: actions/upload-artifact@v4
