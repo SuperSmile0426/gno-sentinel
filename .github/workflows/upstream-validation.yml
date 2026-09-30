@@ -1,0 +1,93 @@
+name: upstream-validation
+
+on:
+  push:
+    branches:
+      - feat/v0.2-analyzer
+    paths:
+      - '.github/workflows/upstream-validation.yml'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'research/upstream-validation.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Sentinel
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Gno corpus
+        uses: actions/checkout@v4
+        with:
+          repository: gnolang/gno
+          ref: 0de4fc2cd62e7066f68d29f3d6f7e931644f63c7
+          path: upstream-gno
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Validate selected upstream realms
+        shell: bash
+        run: |
+          set -u
+          mkdir -p validation
+
+          targets=(
+            "demo-disperse:examples/gno.land/r/demo/disperse"
+            "sys-namereg-v0:examples/gno.land/r/sys/namereg/v0"
+            "gnoland-wugnot:examples/gno.land/r/gnoland/wugnot"
+            "gnops-valopers:examples/gno.land/r/gnops/valopers"
+            "gnoland-blog:examples/gno.land/r/gnoland/blog"
+            "gnoland-boards2-v0:examples/gno.land/r/gnoland/boards2/v0"
+          )
+
+          : > validation/summary.tsv
+
+          for spec in "${targets[@]}"; do
+            slug="${spec%%:*}"
+            rel="${spec#*:}"
+            echo "::group::${slug}"
+
+            set +e
+            go run ./cmd/gno-sentinel scan               --format json               --gno-version "gnolang/gno@0de4fc2"               --network "upstream-example-corpus"               "./upstream-gno/${rel}"               >"validation/${slug}.json"               2>"validation/${slug}.stderr"
+            code=$?
+            set -e
+
+            count="$(python - "validation/${slug}.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        print(json.load(f).get("count", "invalid-json"))
+except Exception:
+    print("invalid-json")
+PY
+)"
+            printf "%s\t%s\t%s\t%s\n" "${slug}" "${rel}" "${code}" "${count}" >> validation/summary.tsv
+
+            echo "path=${rel}"
+            echo "exit_code=${code}"
+            echo "finding_count=${count}"
+            if [ -s "validation/${slug}.stderr" ]; then
+              echo "--- stderr ---"
+              cat "validation/${slug}.stderr"
+            fi
+            echo "--- findings ---"
+            cat "validation/${slug}.json"
+            echo "::endgroup::"
+          done
+
+          echo "=== Validation summary ==="
+          column -t -s $'\t' validation/summary.tsv || cat validation/summary.tsv
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gno-upstream-validation
+          path: validation/
