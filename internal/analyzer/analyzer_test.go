@@ -21,6 +21,8 @@ func TestFixtures(t *testing.T) {
 		{"payment fixed rejecting guard", "payment/fixed", "GNO-PAY-001", 0},
 		{"payment unrelated earlier check still vulnerable", "payment/unrelated-check-vulnerable", "GNO-PAY-001", 1},
 		{"payment positive guarded branch", "payment/positive-guard-fixed", "GNO-PAY-001", 0},
+		{"payment AssertOriginCall guard", "payment/assert-origin-fixed", "GNO-PAY-001", 0},
+		{"payment local helper guard", "payment/helper-guard-fixed", "GNO-PAY-001", 0},
 		{"auth vulnerable", "auth/vulnerable", "GNO-AUTH-001", 1},
 		{"auth alias vulnerable", "auth/alias-vulnerable", "GNO-AUTH-001", 1},
 		{"auth fixed", "auth/fixed", "GNO-AUTH-001", 0},
