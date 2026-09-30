@@ -39,6 +39,7 @@ jobs:
           cp poc/boards2-origin-caller/relay/gnomod.toml upstream-gno/examples/gno.land/r/sentinel/boards2relay/gnomod.toml
           cp poc/boards2-origin-caller/relay/relay.gno upstream-gno/examples/gno.land/r/sentinel/boards2relay/relay.gno
           cp poc/boards2-origin-caller/z_intermediary_remove_member_filetest.gno upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_intermediary_filetest.gno
+          cp poc/boards2-origin-caller/z_intermediary_remove_realm_owner_filetest.gno upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_realm_owner_filetest.gno
 
       - name: Run boards2 filetests with PoC
         shell: bash
