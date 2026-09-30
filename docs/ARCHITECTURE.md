@@ -7,64 +7,47 @@ Gno Sentinel has two layers:
 1. **Analyzer** — deterministic local analysis of Gno source packages.
 2. **Monitor** — optional chain ingestion that discovers packages/transactions and feeds source or metadata into the analyzer and runtime rules.
 
-The analyzer must remain usable without a network connection.
+The analyzer remains usable without a network connection.
 
-## Phase 0 architecture
+## v0.2 local-analysis architecture
 
 ```text
-.gno files
-   |
-   v
-file discovery
-   |
-   v
-Go-compatible parser / AST
-   |
-   v
-rule engine
-   |
-   +--> GNO-PAY-001
-   +--> GNO-AUTH-001
-   +--> GNO-STATE-001
-   +--> GNO-REALM-001
-   |
-   v
-normalized findings
-   |
-   +--> text
-   +--> JSON
+filesystem / future source provider
+              |
+              v
+        SourceProvider
+              |
+              v
+      parsed package model
+    (all .gno files in dir)
+              |
+              v
+         rule engine
+              |
+     +--------+--------+
+     |        |        |
+     v        v        v
+  source   version/  normalized
+ excerpt   network   findings
+              |
+              v
+          text / JSON
 ```
+
+`internal/source` owns source loading and the parsed-package model. Rules no longer read files from disk directly, which makes fixture-backed and future indexed-source providers possible.
 
 Gno currently uses Go parser/type-checker infrastructure in parts of its own tooling. The prototype therefore uses Go's parser for a dependency-light first implementation. This is an engineering convenience, not a claim that Go semantics equal Gno semantics.
 
-## Target architecture
+## Optional ingestion boundary
+
+`internal/ingest.ChainFeed` defines package and transaction event shapes without providing a network implementation yet. This keeps local scanning deterministic and prevents the analyzer from becoming dependent on a live node/indexer.
+
+Target flow:
 
 ```text
-             +---------------------+
-             | local project / CI  |
-             +----------+----------+
-                        |
-                        v
-                 Source Provider
-                        |
-      +-----------------+-----------------+
-      |                                   |
-      v                                   v
-local filesystem                  indexed package source
-                                          ^
-                                          |
-Gno node --> tx-indexer --> ingestion ----+
+Gno node --> tx-indexer --> ChainFeed --> source reconstruction --> Analyzer
                     |
-                    +--> runtime observations
-
-Source --> parser --> semantic model --> rule engine
-                                  |          |
-                                  |          +--> static findings
-                                  +--------------> version metadata
-
-runtime observations ---------------------------> runtime rules
-
-findings/events --> storage --> API --> webhooks / CI / dashboard
+                    +--> runtime observations --> runtime rules
 ```
 
 ## Non-duplication strategy
@@ -72,24 +55,8 @@ findings/events --> storage --> API --> webhooks / CI / dashboard
 - **tx-indexer** remains the transaction/block indexing layer.
 - Existing Gno explorers remain explorers.
 - The official audit-pattern harness remains a useful upstream heuristic corpus.
-- Sentinel focuses on normalized security rules, semantic analysis, versioning, automation, and security-specific runtime correlation.
+- Sentinel focuses on normalized security rules, package/semantic analysis, versioning, automation, and security-specific runtime correlation.
 
-## Interfaces to introduce next
+## Next architecture step
 
-```go
-type SourceProvider interface {
-    Packages(ctx context.Context) ([]Package, error)
-}
-
-type ChainFeed interface {
-    SubscribePackages(ctx context.Context) (<-chan PackageEvent, error)
-    SubscribeTransactions(ctx context.Context) (<-chan TxEvent, error)
-}
-
-type Rule interface {
-    ID() string
-    Analyze(*Context) []Finding
-}
-```
-
-Network implementations must live outside the core AST/rule packages.
+Introduce verified fixture-backed provider/feed implementations first, then a real tx-indexer adapter. Network implementations must remain outside the core AST/rule packages and must not be required for `gno-sentinel scan`.

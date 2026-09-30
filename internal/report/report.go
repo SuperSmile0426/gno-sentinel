@@ -23,11 +23,30 @@ func Text(w io.Writer, findings []model.Finding) error {
 		return err
 	}
 	for _, f := range findings {
-		if _, err := fmt.Fprintf(w, "%s %s [%s/%s]\n%s:%d:%d\n  %s\n  Fix: %s\n\n",
-			f.RuleID, f.Title, f.Severity, f.Confidence, f.File, f.Line, f.Column, f.Explanation, f.Remediation); err != nil {
+		if _, err := fmt.Fprintf(w, "%s %s [%s/%s]\n%s:%d:%d\n", f.RuleID, f.Title, f.Severity, f.Confidence, f.File, f.Line, f.Column); err != nil {
+			return err
+		}
+		if f.GnoVersion != "" || f.Network != "" {
+			if _, err := fmt.Fprintf(w, "  Context: gno=%s network=%s\n", valueOrUnknown(f.GnoVersion), valueOrUnknown(f.Network)); err != nil {
+				return err
+			}
+		}
+		if f.SourceExcerpt != "" {
+			if _, err := fmt.Fprintf(w, "  Source: %s\n", f.SourceExcerpt); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "  %s\n  Fix: %s\n\n", f.Explanation, f.Remediation); err != nil {
 			return err
 		}
 	}
 	_, err := fmt.Fprintf(w, "%d finding(s)\n", len(findings))
 	return err
+}
+
+func valueOrUnknown(v string) string {
+	if v == "" {
+		return "unknown"
+	}
+	return v
 }

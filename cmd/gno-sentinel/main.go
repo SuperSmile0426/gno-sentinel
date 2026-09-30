@@ -30,6 +30,8 @@ func run(args []string) int {
 	fs.SetOutput(os.Stderr)
 	format := fs.String("format", "text", "output format: text or json")
 	failOn := fs.String("fail-on", "none", "exit 2 when findings are at or above: high, medium, low, info, none")
+	gnoVersion := fs.String("gno-version", "", "optional Gno version/build metadata attached to findings")
+	network := fs.String("network", "", "optional network metadata attached to findings")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -38,7 +40,10 @@ func run(args []string) int {
 		return 2
 	}
 
-	a := analyzer.New()
+	a := analyzer.NewWithOptions(analyzer.Options{Metadata: model.AnalysisMetadata{
+		GnoVersion: *gnoVersion,
+		Network:    *network,
+	}})
 	findings, err := a.ScanPath(fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
@@ -75,7 +80,7 @@ func run(args []string) int {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "gno-sentinel scan [--format text|json] [--fail-on high|medium|low|info|none] <path>")
+	fmt.Fprintln(os.Stderr, "gno-sentinel scan [--format text|json] [--fail-on high|medium|low|info|none] [--gno-version version] [--network name] <path>")
 }
 
 func parseThreshold(v string) (int, bool) {
