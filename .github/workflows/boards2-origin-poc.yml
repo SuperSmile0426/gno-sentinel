@@ -1,0 +1,103 @@
+name: boards2-origin-poc
+
+on:
+  push:
+    branches:
+      - research/boards2-origin-poc
+    paths:
+      - '.github/workflows/boards2-origin-poc.yml'
+      - 'poc/boards2-origin-caller/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Sentinel
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Gno
+        uses: actions/checkout@v4
+        with:
+          repository: gnolang/gno
+          ref: 0de4fc2cd62e7066f68d29f3d6f7e931644f63c7
+          path: upstream-gno
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Install PoC files into pinned checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p upstream-gno/examples/gno.land/r/sentinel/boards2relay
+          cp poc/boards2-origin-caller/relay/gnomod.toml upstream-gno/examples/gno.land/r/sentinel/boards2relay/gnomod.toml
+          cp poc/boards2-origin-caller/relay/relay.gno upstream-gno/examples/gno.land/r/sentinel/boards2relay/relay.gno
+          cp poc/boards2-origin-caller/z_intermediary_remove_member_filetest.gno upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_intermediary_filetest.gno
+          cp poc/boards2-origin-caller/z_intermediary_remove_realm_owner_filetest.gno upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_realm_owner_filetest.gno
+
+      - name: Run boards2 filetests with PoC
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-gno/examples
+          go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-poc.log
+
+      - name: Apply immediate-caller control patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("upstream-gno/examples/gno.land/r/gnoland/boards2/v0/public.gno")
+          s = p.read_text()
+          old = "if origin == member {"
+          new = "if caller == member {"
+          if s.count(old) != 1:
+              raise SystemExit(f"expected exactly one target, found {s.count(old)}")
+          p.write_text(s.replace(old, new))
+          PY
+
+      - name: Confirm relay is rejected by immediate-caller patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-gno/examples
+          set +e
+          go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-patched-control.log
+          code=${PIPESTATUS[0]}
+          set -e
+
+          if [ "${code}" -eq 0 ]; then
+            echo "patched control unexpectedly allowed relay PoCs"
+            exit 1
+          fi
+
+          grep -q "z_sentinel_origin_caller_intermediary_filetest" ../../boards2-origin-patched-control.log
+          grep -q "z_sentinel_origin_caller_realm_owner_filetest" ../../boards2-origin-patched-control.log
+          grep -q "doesn't have the required permission" ../../boards2-origin-patched-control.log
+
+      - name: Confirm ordinary upstream boards2 tests still pass with patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_intermediary_filetest.gno
+          rm upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_realm_owner_filetest.gno
+          rm -rf upstream-gno/examples/gno.land/r/sentinel/boards2relay
+          cd upstream-gno/examples
+          go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-patched-upstream.log
+
+      - name: Preserve PoC output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boards2-origin-poc-logs
+          path: |
+            boards2-origin-poc.log
+            boards2-origin-patched-control.log
+            boards2-origin-patched-upstream.log
