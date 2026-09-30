@@ -48,9 +48,56 @@ jobs:
           cd upstream-gno/examples
           go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-poc.log
 
+      - name: Apply immediate-caller control patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("upstream-gno/examples/gno.land/r/gnoland/boards2/v0/public.gno")
+          s = p.read_text()
+          old = "if origin == member {"
+          new = "if caller == member {"
+          if s.count(old) != 1:
+              raise SystemExit(f"expected exactly one target, found {s.count(old)}")
+          p.write_text(s.replace(old, new))
+          PY
+
+      - name: Confirm relay is rejected by immediate-caller patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-gno/examples
+          set +e
+          go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-patched-control.log
+          code=${PIPESTATUS[0]}
+          set -e
+
+          if [ "${code}" -eq 0 ]; then
+            echo "patched control unexpectedly allowed relay PoCs"
+            exit 1
+          fi
+
+          grep -q "z_sentinel_origin_caller_intermediary_filetest" ../../boards2-origin-patched-control.log
+          grep -q "z_sentinel_origin_caller_realm_owner_filetest" ../../boards2-origin-patched-control.log
+          grep -q "doesn't have the required permission" ../../boards2-origin-patched-control.log
+
+      - name: Confirm ordinary upstream boards2 tests still pass with patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_intermediary_filetest.gno
+          rm upstream-gno/examples/gno.land/r/gnoland/boards2/v0/filetests/z_sentinel_origin_caller_realm_owner_filetest.gno
+          rm -rf upstream-gno/examples/gno.land/r/sentinel/boards2relay
+          cd upstream-gno/examples
+          go run ../gnovm/cmd/gno test -v ./gno.land/r/gnoland/boards2/v0/... 2>&1 | tee ../../boards2-origin-patched-upstream.log
+
       - name: Preserve PoC output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boards2-origin-poc-log
-          path: boards2-origin-poc.log
+          name: boards2-origin-poc-logs
+          path: |
+            boards2-origin-poc.log
+            boards2-origin-patched-control.log
+            boards2-origin-patched-upstream.log
